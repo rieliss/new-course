@@ -522,7 +522,7 @@ foreach ($enrolled_students as $student) {
         </div>
         
         <!-- Promotion Section -->
-        <?php if (!empty($enrolled_students)): ?>
+        <!-- <?php if (!empty($enrolled_students)): ?>
             <div class="promotion-section">
                 <h3>🎓 การเลื่อนชั้น</h3>
                 <p style="color: #666; margin-bottom: 15px;">
@@ -557,6 +557,7 @@ foreach ($enrolled_students as $student) {
                         <input type="hidden" name="action" value="promote_all">
                         <button type="submit" class="btn btn-success">🎓 เลื่อนชั้นนักเรียนทั้งหมด (<?php echo $can_promote; ?> คน)</button>
                         <a href="bulk-promotion.php?course_id=<?php echo $course_id; ?>" class="btn btn-warning">⚙️ จัดการเลื่อนชั้นแบบละเอียด</a>
+                        <a href="course-promotion.php?course_id=<?php echo $course_id; ?>" class="btn btn-primary">📈 เลื่อนชั้นตามวิชา (Course-based)</a>
                     </form>
                 <?php else: ?>
                     <div class="alert alert-warning">
@@ -564,7 +565,7 @@ foreach ($enrolled_students as $student) {
                     </div>
                 <?php endif; ?>
             </div>
-        <?php endif; ?>
+        <?php endif; ?> -->
         
         <!-- Students List -->
         <?php if (!empty($students_by_class)): ?>

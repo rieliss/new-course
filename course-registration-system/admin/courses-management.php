@@ -436,9 +436,9 @@ $stats = $stats_result->fetch_assoc();
             </form>
             
             <div class="action-buttons">
-                <button class="btn btn-success">➕ เพิ่มวิชาใหม่</button>
-                <button class="btn btn-primary">📁 นำเข้า CSV</button>
-                <button class="btn btn-warning">📤 ส่งออก CSV</button>
+                <a href="course-add.php" class="btn btn-success">➕ เพิ่มวิชาใหม่</a>
+                <a href="course-import-csv.php" class="btn btn-primary">📁 นำเข้า CSV</a>
+                <a href="course-export-all-csv.php" class="btn btn-warning">📤 ส่งออก CSV</a>
             </div>
         </div>
         
@@ -486,7 +486,9 @@ $stats = $stats_result->fetch_assoc();
                                 <td class="action-buttons-cell">
                                     <a href="course-students.php?course_id=<?php echo $course['id']; ?>" class="btn btn-info btn-sm">👨‍🎓 นักเรียน</a>
                                     
-                                    <button class="btn btn-primary btn-sm">✏️ แก้ไข</button>
+                                    <a href="course-edit.php?course_id=<?php echo $course['id']; ?>" class="btn btn-primary btn-sm">✏️ แก้ไข</a>
+                                    
+                                    <a href="course-export-csv.php?course_id=<?php echo $course['id']; ?>" class="btn btn-warning btn-sm">📥 ส่งออก CSV</a>
                                     
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="action" value="toggle_status">

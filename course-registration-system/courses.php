@@ -19,18 +19,19 @@ $user_data = $user_stmt->get_result()->fetch_assoc();
 $user_class = $user_data['class_room'];
 $user_stmt->close();
 
-// Get all courses with search
+// Get all courses with search and class filter
 $query = "SELECT c.id, c.course_code, c.course_name, c.teacher_name, c.credits, c.schedule_day, c.schedule_time, c.max_seats, c.status, c.allowed_classes,
           COUNT(e.id) as enrolled_count
           FROM courses c
           LEFT JOIN enrollments e ON c.id = e.course_id AND e.enrollment_status = 'enrolled'
-          WHERE c.course_name LIKE ? OR c.course_code LIKE ?
+          WHERE (c.course_name LIKE ? OR c.course_code LIKE ?)
+          AND (c.allowed_classes IS NULL OR c.allowed_classes = '' OR FIND_IN_SET(?, CONCAT(c.allowed_classes, ',')))
           GROUP BY c.id
           ORDER BY c.course_code";
 
 $search_param = "%$search%";
 $stmt = $conn->prepare($query);
-$stmt->bind_param("ss", $search_param, $search_param);
+$stmt->bind_param("sss", $search_param, $search_param, $user_class);
 $stmt->execute();
 $courses = $stmt->get_result();
 

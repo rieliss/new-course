@@ -92,8 +92,8 @@ $search = $_GET['search'] ?? '';
 $filter_class = $_GET['filter_class'] ?? '';
 
 $where_conditions = ["role = 'student'"];
-$params = ['student'];
-$param_types = 's';
+$params = [];
+$param_types = '';
 
 if (!empty($search)) {
     $where_conditions[] = "(username LIKE ? OR full_name LIKE ? OR student_id LIKE ?)";
@@ -117,7 +117,12 @@ $query = "SELECT id, student_id, username, full_name, class_room, class_number, 
           FROM users $where_clause 
           ORDER BY class_room, class_number";
 $stmt = $conn->prepare($query);
-$stmt->bind_param($param_types, ...$params);
+
+// Only bind parameters if there are any
+if (!empty($params)) {
+    $stmt->bind_param($param_types, ...$params);
+}
+
 $stmt->execute();
 $students_result = $stmt->get_result();
 
