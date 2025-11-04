@@ -57,95 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $error = "❌ กรุณาเลือกนักเรียนและระบุห้องเรียนใหม่";
         }
     }
-    
-    // NEW: Quick promote by class
-    elseif ($action == 'quick_promote_class') {
-        $class_name = $_POST['class_name'] ?? '';
-        
-        if (!empty($class_name)) {
-            $new_class = promoteClassRoom($class_name);
-            
-            if ($new_class && $new_class != $class_name) {
-                $promoted_count = 0;
-                $conn->begin_transaction();
-                
-                try {
-                    // Get all students in this class
-                    $students_query = "SELECT id, full_name, class_room FROM users 
-                                      WHERE role = 'student' AND class_room = ?";
-                    $students_stmt = $conn->prepare($students_query);
-                    $students_stmt->bind_param("s", $class_name);
-                    $students_stmt->execute();
-                    $students_result = $students_stmt->get_result();
-                    
-                    while ($student = $students_result->fetch_assoc()) {
-                        // Update class room
-                        $update_query = "UPDATE users SET class_room = ? WHERE id = ?";
-                        $update_stmt = $conn->prepare($update_query);
-                        $update_stmt->bind_param("si", $new_class, $student['id']);
-                        $update_stmt->execute();
-                        $update_stmt->close();
-                        
-                        $promoted_count++;
-                        
-                        log_activity($_SESSION['user_id'], 'quick_class_promotion', 
-                            "เลื่อนชั้นทั้งห้อง: {$student['full_name']} จาก {$class_name} เป็น {$new_class}", 
-                            $student['id']);
-                    }
-                    
-                    $students_stmt->close();
-                    $conn->commit();
-                    $success = "✅ เลื่อนชั้นนักเรียนห้อง {$class_name} เรียบร้อยแล้ว จำนวน {$promoted_count} คน → {$new_class}";
-                } catch (Exception $e) {
-                    $conn->rollback();
-                    $error = "❌ เกิดข้อผิดพลาดในการเลื่อนชั้น: " . $e->getMessage();
-                }
-            } else {
-                $error = "❌ ไม่สามารถเลื่อนชั้นห้อง {$class_name} ได้";
-            }
-        }
-    }
-    
-    // NEW: Quick promote all students
-    elseif ($action == 'quick_promote_all') {
-        $promoted_count = 0;
-        $skipped_count = 0;
-        $conn->begin_transaction();
-        
-        try {
-            // Get all students
-            $students_query = "SELECT id, full_name, class_room FROM users WHERE role = 'student'";
-            $students_result = $conn->query($students_query);
-            
-            while ($student = $students_result->fetch_assoc()) {
-                $new_class = promoteClassRoom($student['class_room']);
-                
-                // Only promote if there's a valid new class
-                if ($new_class && $new_class != $student['class_room']) {
-                    $update_query = "UPDATE users SET class_room = ? WHERE id = ?";
-                    $update_stmt = $conn->prepare($update_query);
-                    $update_stmt->bind_param("si", $new_class, $student['id']);
-                    $update_stmt->execute();
-                    $update_stmt->close();
-                    
-                    $promoted_count++;
-                    
-                    log_activity($_SESSION['user_id'], 'auto_promotion_all', 
-                        "เลื่อนชั้นอัตโนมัติ: {$student['full_name']} จาก {$student['class_room']} เป็น {$new_class}", 
-                        $student['id']);
-                } else {
-                    $skipped_count++;
-                }
-            }
-            
-            $conn->commit();
-            $success = "✅ เลื่อนชั้นนักเรียนเรียบร้อยแล้ว {$promoted_count} คน" . 
-                      ($skipped_count > 0 ? " (ข้าม {$skipped_count} คนที่ไม่สามารถเลื่อนได้)" : "");
-        } catch (Exception $e) {
-            $conn->rollback();
-            $error = "❌ เกิดข้อผิดพลาดในการเลื่อนชั้น: " . $e->getMessage();
-        }
-    }
 }
 
 // Function to promote class room
@@ -414,95 +325,6 @@ while ($row = $classes_result->fetch_assoc()) {
         
         .btn-warning:hover { background: #e0a800; }
         
-        /* Quick Action Styles */
-        .quick-actions {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            margin-bottom: 30px;
-        }
-        
-        .quick-actions h3 {
-            color: white;
-            font-size: 22px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        .quick-action-grid {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-        }
-        
-        .btn-quick-all {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            padding: 20px 40px;
-            border: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
-            text-align: center;
-        }
-        
-        .btn-quick-all:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(245, 87, 108, 0.5);
-        }
-        
-        .btn-quick-all .btn-subtitle {
-            font-size: 12px;
-            font-weight: 400;
-            margin-top: 5px;
-            opacity: 0.9;
-        }
-        
-        .btn-quick-class {
-            background: #28a745;
-            color: white;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .btn-quick-class:hover {
-            background: #218838;
-            transform: translateX(2px);
-        }
-        
-        .divider {
-            text-align: center;
-            margin: 30px 0;
-            position: relative;
-        }
-        
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #ddd;
-        }
-        
-        .divider span {
-            background: #f5f5f5;
-            padding: 0 20px;
-            position: relative;
-            color: #999;
-            font-size: 14px;
-        }
-        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -552,18 +374,6 @@ while ($row = $classes_result->fetch_assoc()) {
         .class-promotion-info {
             color: #28a745;
             font-size: 14px;
-        }
-        
-        .calc-hint {
-            display: inline-block;
-            margin-left: 5px;
-            padding: 2px 8px;
-            background: #e3f2fd;
-            color: #1976d2;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 600;
-            font-family: monospace;
         }
         
         .students-table {
@@ -719,27 +529,6 @@ while ($row = $classes_result->fetch_assoc()) {
                 <button type="submit" class="btn btn-primary">🔍 ค้นหา</button>
             </form>
             
-            <!-- Quick Action Buttons -->
-            <div class="quick-actions">
-                <h3>⚡ เลื่อนชั้นแบบรวดเร็ว</h3>
-                <div class="quick-action-grid">
-                    <form method="POST" onsubmit="return confirm('🚀 คุณแน่ใจหรือไม่ที่จะเลื่อนชั้นนักเรียนทั้งหมดอัตโนมัติ?\n\nระบบจะเลื่อนชั้นตามห้องเรียนปัจจุบัน\n(ม.4/1 → ม.5/1, ม.6/1 → ป.1/1)\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!');" style="display: inline;">
-                        <input type="hidden" name="action" value="quick_promote_all">
-                        <button type="submit" class="btn-quick-all">
-                            🚀 เลื่อนชั้นทั้งหมดอัตโนมัติ
-                            <div class="btn-subtitle">เลื่อนนักเรียนทุกคนในคลิกเดียว</div>
-                        </button>
-                    </form>
-                </div>
-                <p style="color: #666; font-size: 14px; margin-top: 10px;">
-                    💡 <strong>คำแนะนำ:</strong> ใช้ปุ่มนี้เมื่อต้องการเลื่อนชั้นนักเรียนทั้งหมดในคราวเดียว (จะข้ามนักเรียนที่ไม่สามารถเลื่อนได้อัตโนมัติ)
-                </p>
-            </div>
-            
-            <div class="divider">
-                <span>หรือเลือกเอง</span>
-            </div>
-            
             <div class="action-buttons-top">
                 <button type="button" onclick="selectAll()" class="btn btn-primary">☑️ เลือกทั้งหมด</button>
                 <button type="button" onclick="selectNone()" class="btn btn-secondary">☐ ยกเลิกการเลือก</button>
@@ -792,32 +581,10 @@ while ($row = $classes_result->fetch_assoc()) {
                                 <div class="class-promotion-info">
                                     <?php 
                                     $promoted_class = promoteClassRoom($class_name);
-                                    if ($promoted_class && $promoted_class != $class_name): 
-                                        // Extract level info for display
-                                        preg_match('/^([ม]|[ป])\.(\d+)\/(.+)$/', $class_name, $current_matches);
-                                        preg_match('/^([ม]|[ป])\.(\d+)\/(.+)$/', $promoted_class, $promoted_matches);
-                                        
-                                        $calc_hint = '';
-                                        if ($current_matches && $promoted_matches) {
-                                            if ($current_matches[1] === 'ม' && $current_matches[2] == 6) {
-                                                $calc_hint = '(ม.6→ป.1)';
-                                            } else {
-                                                $calc_hint = '(' . $current_matches[1] . '.' . $current_matches[2] . '+1)';
-                                            }
-                                        }
-                                    ?>
+                                    if ($promoted_class && $promoted_class != $class_name): ?>
                                         → เลื่อนเป็น <strong><?php echo htmlspecialchars($promoted_class); ?></strong>
-                                        <?php if ($calc_hint): ?>
-                                            <span class="calc-hint"><?php echo $calc_hint; ?></span>
-                                        <?php endif; ?>
-                                        <form method="POST" style="display: inline; margin-left: 10px;" 
-                                              onsubmit="return confirm('⚡ เลื่อนชั้นนักเรียนห้อง <?php echo htmlspecialchars($class_name); ?> ทั้งหมด?\n\nจะเลื่อนเป็น <?php echo htmlspecialchars($promoted_class); ?>\nจำนวน <?php echo count($class_students); ?> คน\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!');">
-                                            <input type="hidden" name="action" value="quick_promote_class">
-                                            <input type="hidden" name="class_name" value="<?php echo htmlspecialchars($class_name); ?>">
-                                            <button type="submit" class="btn-quick-class">⚡ เลื่อนชั้นทั้งห้อง</button>
-                                        </form>
                                     <?php else: ?>
-                                        <span style="color: #999;">ไม่มีคำแนะนำการเลื่อนชั้น</span>
+                                        ไม่มีคำแนะนำการเลื่อนชั้น
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -854,31 +621,15 @@ while ($row = $classes_result->fetch_assoc()) {
                                                 </span>
                                             </td>
                                             <td>
-                                                <?php 
-                                                $suggested = promoteClassRoom($student['class_room']);
-                                                $tooltip = '';
-                                                if ($suggested && $suggested != $student['class_room']) {
-                                                    preg_match('/^([ม]|[ป])\.(\d+)\/(.+)$/', $student['class_room'], $curr);
-                                                    preg_match('/^([ม]|[ป])\.(\d+)\/(.+)$/', $suggested, $sugg);
-                                                    if ($curr && $sugg) {
-                                                        if ($curr[1] === 'ม' && $curr[2] == 6) {
-                                                            $tooltip = 'แนะนำ: ' . $suggested . ' (ม.6→ป.1)';
-                                                        } else {
-                                                            $tooltip = 'แนะนำ: ' . $suggested . ' (' . $curr[1] . '.' . $curr[2] . '+1)';
-                                                        }
-                                                    }
-                                                }
-                                                ?>
                                                 <input type="text" 
                                                        name="new_classes[<?php echo $student['id']; ?>]" 
                                                        class="class-input new-class-input"
-                                                       placeholder="<?php echo $suggested ?: 'ห้องใหม่'; ?>"
-                                                       title="<?php echo $tooltip ?: 'กรอกห้องใหม่ หรือกด เติมห้องที่แนะนำ'; ?>"
+                                                       placeholder="ห้องใหม่"
                                                        data-student-id="<?php echo $student['id']; ?>">
                                                 <input type="hidden" 
                                                        class="suggested-class" 
                                                        data-student-id="<?php echo $student['id']; ?>" 
-                                                       value="<?php echo htmlspecialchars($suggested); ?>">
+                                                       value="<?php echo htmlspecialchars(promoteClassRoom($student['class_room'])); ?>">
                                             </td>
                                             <td>
                                                 <span class="status-badge status-<?php echo $student['status']; ?>">

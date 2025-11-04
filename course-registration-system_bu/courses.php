@@ -260,43 +260,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             margin-right: 10px;
         }
         
-        .allowed-classes-info {
-            border-top: 1px solid #e0e0e0;
-            padding-top: 12px;
-            margin-top: 12px;
-        }
-        
-        .allowed-classes {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-        }
-        
-        .class-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            background: #e9ecef;
-            color: #495057;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            border: 1px solid #dee2e6;
-        }
-        
-        .class-badge.class-all {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-        }
-        
-        .class-badge.class-user {
-            background: #d4edda;
-            color: #155724;
-            border: 2px solid #28a745;
-            font-weight: 700;
-        }
-        
         .seats-info {
             background: #f0f0f0;
             padding: 12px;
@@ -427,28 +390,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                             </div>
                             <div class="course-info">
                                 <strong>⭐ หน่วยกิต:</strong> <?php echo $course['credits']; ?>
-                            </div>
-                            
-                            <div class="course-info allowed-classes-info">
-                                <strong>🏫 ห้องที่เปิดรับ:</strong>
-                                <div class="allowed-classes">
-                                    <?php 
-                                    if (empty($course['allowed_classes'])) {
-                                        echo '<span class="class-badge class-all">ทุกห้อง</span>';
-                                    } else {
-                                        $allowed_classes = explode(',', $course['allowed_classes']);
-                                        foreach ($allowed_classes as $class) {
-                                            $class = trim($class);
-                                            $is_user_class = ($class === $user_class);
-                                            $badge_class = $is_user_class ? 'class-badge class-user' : 'class-badge';
-                                            echo "<span class='{$badge_class}'>";
-                                            echo htmlspecialchars($class);
-                                            if ($is_user_class) echo ' ✓';
-                                            echo '</span>';
-                                        }
-                                    }
-                                    ?>
-                                </div>
                             </div>
                             
                             <div class="seats-info">

@@ -26,7 +26,79 @@ if ($course_result->num_rows == 0) {
 $course = $course_result->fetch_assoc();
 $course_stmt->close();
 
-// Promotion features removed - use User Management page for bulk promotion
+// Handle promotion action
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    
+    if ($action == 'promote_all') {
+        // Get all enrolled students
+        $students_query = "SELECT u.id, u.full_name, u.class_room, u.class_number 
+                          FROM users u 
+                          JOIN enrollments e ON u.id = e.student_id 
+                          WHERE e.course_id = ? AND e.enrollment_status = 'enrolled' AND u.role = 'student'";
+        $students_stmt = $conn->prepare($students_query);
+        $students_stmt->bind_param("i", $course_id);
+        $students_stmt->execute();
+        $students_result = $students_stmt->get_result();
+        
+        $promoted_count = 0;
+        $conn->begin_transaction();
+        
+        try {
+            while ($student = $students_result->fetch_assoc()) {
+                $new_class_room = promoteClassRoom($student['class_room']);
+                if ($new_class_room) {
+                    $update_query = "UPDATE users SET class_room = ? WHERE id = ?";
+                    $update_stmt = $conn->prepare($update_query);
+                    $update_stmt->bind_param("si", $new_class_room, $student['id']);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+                    $promoted_count++;
+                    
+                    log_activity($_SESSION['user_id'], 'student_promotion', 
+                        "เลื่อนชั้น: {$student['full_name']} จาก {$student['class_room']} เป็น $new_class_room", 
+                        $student['id']);
+                }
+            }
+            
+            $conn->commit();
+            $success = "✅ เลื่อนชั้นนักเรียนเรียบร้อยแล้ว จำนวน $promoted_count คน";
+        } catch (Exception $e) {
+            $conn->rollback();
+            $error = "❌ เกิดข้อผิดพลาดในการเลื่อนชั้น: " . $e->getMessage();
+        }
+        
+        $students_stmt->close();
+    }
+}
+
+// Function to promote class room
+function promoteClassRoom($current_class) {
+    if (empty($current_class)) return null;
+    
+    // Pattern: ม.4/1 -> ม.5/1, ป.1/1 -> ป.2/1, etc.
+    if (preg_match('/^([ม]|[ป])\.(\d+)\/(.+)$/', $current_class, $matches)) {
+        $level_type = $matches[1]; // ม. หรือ ป.
+        $current_level = (int)$matches[2];
+        $section = $matches[3];
+        
+        // ม.6 ไปเป็น ป.1
+        if ($level_type == 'ม' && $current_level == 6) {
+            return "ป.1/$section";
+        }
+        // ป.6 จบการศึกษา - ไม่เลื่อน
+        elseif ($level_type == 'ป' && $current_level == 6) {
+            return null;
+        }
+        // เลื่อนชั้นปกติ
+        else {
+            $new_level = $current_level + 1;
+            return "$level_type.$new_level/$section";
+        }
+    }
+    
+    return null; // ไม่สามารถเลื่อนได้
+}
 
 // Get enrolled students
 $students_query = "SELECT u.id, u.student_id, u.username, u.full_name, u.class_room, u.class_number, e.enrolled_at
@@ -154,6 +226,64 @@ foreach ($enrolled_students as $student) {
             opacity: 0.9;
         }
         
+        .promotion-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .promotion-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .promotion-preview {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .promotion-preview h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .promotion-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 6px;
+        }
+        
+        .class-from {
+            padding: 4px 8px;
+            background: #ffc107;
+            color: #212529;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .arrow {
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .class-to {
+            padding: 4px 8px;
+            background: #28a745;
+            color: white;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }
         
         .alert {
             padding: 15px 20px;
@@ -257,6 +387,22 @@ foreach ($enrolled_students as $student) {
             background: #f8f9fa;
         }
         
+        .promotion-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .can-promote {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .cannot-promote {
+            background: #ffeaa7;
+            color: #d35400;
+        }
         
         .stats-grid {
             display: grid;
@@ -357,7 +503,69 @@ foreach ($enrolled_students as $student) {
                 <div class="stat-value"><?php echo count($students_by_class); ?></div>
                 <div class="stat-label">🏫 จำนวนห้องเรียน</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    <?php 
+                    $can_promote = 0;
+                    foreach ($enrolled_students as $student) {
+                        if (promoteClassRoom($student['class_room'])) $can_promote++;
+                    }
+                    echo $can_promote;
+                    ?>
+                </div>
+                <div class="stat-label">🎓 เลื่อนชั้นได้</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value"><?php echo count($enrolled_students) - $can_promote; ?></div>
+                <div class="stat-label">⚠️ ไม่สามารถเลื่อนได้</div>
+            </div>
         </div>
+        
+        <!-- Promotion Section -->
+        <!-- <?php if (!empty($enrolled_students)): ?>
+            <div class="promotion-section">
+                <h3>🎓 การเลื่อนชั้น</h3>
+                <p style="color: #666; margin-bottom: 15px;">
+                    ระบบจะเลื่อนชั้นนักเรียนที่ลงทะเบียนในวิชานี้ไปยังชั้นปีถัดไป
+                </p>
+                
+                <div class="promotion-preview">
+                    <h4>📋 ตัวอย่างการเลื่อนชั้น:</h4>
+                    <?php 
+                    $preview_classes = array_unique(array_column($enrolled_students, 'class_room'));
+                    foreach (array_slice($preview_classes, 0, 5) as $class):
+                        $promoted_class = promoteClassRoom($class);
+                    ?>
+                        <div class="promotion-item">
+                            <span class="class-from"><?php echo htmlspecialchars($class ?: 'ไม่ระบุ'); ?></span>
+                            <span class="arrow">→</span>
+                            <?php if ($promoted_class): ?>
+                                <span class="class-to"><?php echo htmlspecialchars($promoted_class); ?></span>
+                            <?php else: ?>
+                                <span style="color: #dc3545; font-weight: 600;">ไม่สามารถเลื่อนได้</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <?php if ($can_promote > 0): ?>
+                    <div class="alert alert-warning">
+                        ⚠️ การเลื่อนชั้นจะส่งผลกระทบต่อข้อมูลนักเรียน <?php echo $can_promote; ?> คน กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ
+                    </div>
+                    
+                    <form method="POST" onsubmit="return confirm('⚠️ คุณแน่ใจหรือไม่ที่จะเลื่อนชั้นนักเรียนทั้งหมดในรายวิชานี้?\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!');">
+                        <input type="hidden" name="action" value="promote_all">
+                        <button type="submit" class="btn btn-success">🎓 เลื่อนชั้นนักเรียนทั้งหมด (<?php echo $can_promote; ?> คน)</button>
+                        <a href="bulk-promotion.php?course_id=<?php echo $course_id; ?>" class="btn btn-warning">⚙️ จัดการเลื่อนชั้นแบบละเอียด</a>
+                        <a href="course-promotion.php?course_id=<?php echo $course_id; ?>" class="btn btn-primary">📈 เลื่อนชั้นตามวิชา (Course-based)</a>
+                    </form>
+                <?php else: ?>
+                    <div class="alert alert-warning">
+                        ℹ️ ไม่มีนักเรียนที่สามารถเลื่อนชั้นได้ในรายวิชานี้
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?> -->
         
         <!-- Students List -->
         <?php if (!empty($students_by_class)): ?>
@@ -367,6 +575,11 @@ foreach ($enrolled_students as $student) {
                         <div class="class-header">
                             🏫 ห้อง <?php echo htmlspecialchars($class_name); ?> 
                             (<?php echo count($students); ?> คน)
+                            <?php 
+                            $promoted_class = promoteClassRoom($class_name);
+                            if ($promoted_class): ?>
+                                → เลื่อนเป็น <strong><?php echo htmlspecialchars($promoted_class); ?></strong>
+                            <?php endif; ?>
                         </div>
                         <table class="students-table">
                             <thead>
@@ -376,6 +589,7 @@ foreach ($enrolled_students as $student) {
                                     <th>ชื่อ-นามสกุล</th>
                                     <th>ชื่อผู้ใช้</th>
                                     <th>วันที่ลงทะเบียน</th>
+                                    <th>สถานะการเลื่อนชั้น</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -386,6 +600,13 @@ foreach ($enrolled_students as $student) {
                                         <td><?php echo htmlspecialchars($student['full_name']); ?></td>
                                         <td><?php echo htmlspecialchars($student['username']); ?></td>
                                         <td><?php echo format_date_thai($student['enrolled_at']); ?></td>
+                                        <td>
+                                            <?php if (promoteClassRoom($student['class_room'])): ?>
+                                                <span class="promotion-badge can-promote">✅ เลื่อนชั้นได้</span>
+                                            <?php else: ?>
+                                                <span class="promotion-badge cannot-promote">⚠️ ไม่สามารถเลื่อนได้</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
