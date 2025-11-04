@@ -160,7 +160,8 @@ function promoteClassRoom($current_class) {
         
         // ม.6 ไปเป็น ป.1
         if ($level_type == 'ม' && $current_level == 6) {
-            return "ป.1/$section";
+            return $current_class;
+            // return "ป.1/$section";
         }
         // ป.6 จบการศึกษา - ไม่เลื่อน
         elseif ($level_type == 'ป' && $current_level == 6) {
@@ -723,7 +724,7 @@ while ($row = $classes_result->fetch_assoc()) {
             <div class="quick-actions">
                 <h3>⚡ เลื่อนชั้นแบบรวดเร็ว</h3>
                 <div class="quick-action-grid">
-                    <form method="POST" onsubmit="return confirm('🚀 คุณแน่ใจหรือไม่ที่จะเลื่อนชั้นนักเรียนทั้งหมดอัตโนมัติ?\n\nระบบจะเลื่อนชั้นตามห้องเรียนปัจจุบัน\n(ม.4/1 → ม.5/1, ม.6/1 → ป.1/1)\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!');" style="display: inline;">
+                    <form method="POST" onsubmit="return confirm('🚀 คุณแน่ใจหรือไม่ที่จะเลื่อนชั้นนักเรียนทั้งหมดอัตโนมัติ?\n\nระบบจะเลื่อนชั้นตามห้องเรียนปัจจุบัน\n(ม.4/1 → ม.5/1, ม.6/1 → ม.6/1)\n\nการกระทำนี้ไม่สามารถย้อนกลับได้!');" style="display: inline;">
                         <input type="hidden" name="action" value="quick_promote_all">
                         <button type="submit" class="btn-quick-all">
                             🚀 เลื่อนชั้นทั้งหมดอัตโนมัติ
@@ -949,19 +950,43 @@ while ($row = $classes_result->fetch_assoc()) {
             updateSelectedCount();
         }
         
+        // function fillSuggestedClasses() {
+        //     const inputs = document.querySelectorAll('.new-class-input');
+        //     const suggestedInputs = document.querySelectorAll('.suggested-class');
+            
+        //     suggestedInputs.forEach(suggested => {
+        //         const studentId = suggested.dataset.studentId;
+        //         const classInput = document.querySelector(`input[name="new_classes[${studentId}]"]`);
+        //         if (classInput && suggested.value) {
+        //             classInput.value = suggested.value;
+        //         }
+        //     });
+        // }
         function fillSuggestedClasses() {
             const inputs = document.querySelectorAll('.new-class-input');
             const suggestedInputs = document.querySelectorAll('.suggested-class');
-            
+
             suggestedInputs.forEach(suggested => {
                 const studentId = suggested.dataset.studentId;
                 const classInput = document.querySelector(`input[name="new_classes[${studentId}]"]`);
-                if (classInput && suggested.value) {
-                    classInput.value = suggested.value;
+                const currentValue = suggested.value.trim();
+
+                if (classInput && currentValue) {
+                    const match = currentValue.match(/^ม\.(\d)\/(\d+)$/); // e.g. ม.5/1
+                    if (match) {
+                        const level = parseInt(match[1]);
+                        const room = match[2];
+
+                        if (level < 6) {
+                            classInput.value = `ม.${level + 1}/${room}`;
+                        } else {
+                            classInput.value = '';
+                        }
+                    }
                 }
             });
         }
-        
+
         function clearAllClasses() {
             const inputs = document.querySelectorAll('.new-class-input');
             inputs.forEach(input => {

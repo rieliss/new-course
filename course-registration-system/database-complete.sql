@@ -139,9 +139,9 @@ ON DUPLICATE KEY UPDATE username=username;
 -- ========================================
 -- Student 1 (สมเด็จ) enrolls in CS101 (2024)
 -- System will create future enrollments for 2025 and 2026
-INSERT INTO enrollments (student_id, course_id, enrollment_status, academic_year, visibility_status)
-VALUES 
-(1, 1, 'enrolled', 2024, 'current');
+-- INSERT INTO enrollments (student_id, course_id, enrollment_status, academic_year, visibility_status)
+-- VALUES 
+-- (1, 1, 'enrolled', 2024, 'current');
 
 -- ========================================
 -- Log: System Ready

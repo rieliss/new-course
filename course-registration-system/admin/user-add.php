@@ -22,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $error = '❌ กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน';
     } elseif ($password !== $confirm_password) {
         $error = '❌ รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน';
-    } elseif (strlen($password) < 6) {
-        $error = '❌ รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    } elseif (strlen($password) < 5) {
+        $error = '❌ รหัสผ่านต้องมีอย่างน้อย 5 ตัวอักษร';
     } else {
         // Check if student_id or username already exists
         $check_query = "SELECT id FROM users WHERE student_id = ? OR username = ?";
@@ -290,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <div class="form-group">
                             <label for="password">🔐 รหัสผ่าน <span class="required">*</span></label>
                             <input type="password" id="password" name="password" required>
-                            <small>รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร</small>
+                            <small>รหัสผ่านต้องมีอย่างน้อย 5 ตัวอักษร</small>
                         </div>
                         
                         <div class="form-group">
