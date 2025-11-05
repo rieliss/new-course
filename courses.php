@@ -10,33 +10,57 @@ if ($_SESSION['role'] === 'admin') {
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $user_id = $_SESSION['user_id'];
 
-// Get user's class room
-$user_query = "SELECT class_room FROM users WHERE id = ?";
+// Get user's class room and grade level
+$user_query = "SELECT class_room, class_number FROM users WHERE id = ?";
 $user_stmt = $conn->prepare($user_query);
 $user_stmt->bind_param("i", $user_id);
 $user_stmt->execute();
 $user_data = $user_stmt->get_result()->fetch_assoc();
 $user_class = $user_data['class_room'];
+$user_class_number = $user_data['class_number'];
 $user_stmt->close();
 
-// Get all courses with search and class filter
-$query = "SELECT c.id, c.course_code, c.course_name, c.teacher_name, c.credits, c.schedule_day, c.schedule_time, c.max_seats, c.status, c.allowed_classes,
+// Extract grade level from class_room (e.g., "ม.4/1" -> 4)
+$grade_level = (int)substr($user_class, 2, 1);
+
+// Get current semester from admin config
+$config_query = "SELECT config_value FROM admin_config WHERE config_key = 'current_semester'";
+$config_stmt = $conn->prepare($config_query);
+$config_stmt->execute();
+$config_result = $config_stmt->get_result()->fetch_assoc();
+$current_semester = $config_result ? (int)$config_result['config_value'] : 1;
+$config_stmt->close();
+
+// Get current academic year from admin config
+$year_query = "SELECT config_value FROM admin_config WHERE config_key = 'current_academic_year'";
+$year_stmt = $conn->prepare($year_query);
+$year_stmt->execute();
+$year_result = $year_stmt->get_result()->fetch_assoc();
+$current_year = $year_result ? (int)$year_result['config_value'] : 2024;
+$year_stmt->close();
+
+// Get all courses with search, class filter, and semester filter
+$query = "SELECT c.id, c.course_code, c.course_name, c.teacher_name, c.credits, c.schedule_day, c.schedule_time, c.max_seats, c.status, c.classroom, c.grade_level, c.semester, c.max_enrollments,
           COUNT(e.id) as enrolled_count
           FROM courses c
           LEFT JOIN enrollments e ON c.id = e.course_id AND e.enrollment_status = 'enrolled'
           WHERE (c.course_name LIKE ? OR c.course_code LIKE ?)
-          AND (c.allowed_classes IS NULL OR c.allowed_classes = '' OR FIND_IN_SET(?, CONCAT(c.allowed_classes, ',')))
+          AND c.grade_level = ?
+          AND c.semester = ?
+          AND c.classroom = ?
+          AND c.academic_year = ?
+          AND c.status = 'open'
           GROUP BY c.id
           ORDER BY c.course_code";
 
 $search_param = "%$search%";
 $stmt = $conn->prepare($query);
-$stmt->bind_param("sss", $search_param, $search_param, $user_class);
+$stmt->bind_param("ssiisi", $search_param, $search_param, $grade_level, $current_semester, $user_class, $current_year);
 $stmt->execute();
 $courses = $stmt->get_result();
 
-// Get enrolled courses
-$enrolled_query = "SELECT course_id FROM enrollments WHERE student_id = ? AND enrollment_status = 'enrolled'";
+// Get enrolled courses for this semester
+$enrolled_query = "SELECT course_id FROM enrollments WHERE student_id = ? AND enrollment_status = 'enrolled' AND academic_year = (SELECT config_value FROM admin_config WHERE config_key = 'current_academic_year')";
 $enrolled_stmt = $conn->prepare($enrolled_query);
 $enrolled_stmt->bind_param("i", $user_id);
 $enrolled_stmt->execute();
@@ -45,6 +69,10 @@ $enrolled_courses = [];
 while ($row = $enrolled_result->fetch_assoc()) {
     $enrolled_courses[] = $row['course_id'];
 }
+$enrolled_stmt->close();
+
+// Get enrollment count for current semester to check block course limit
+$semester_enroll_count = count($enrolled_courses);
 
 // Handle enrollment/unenrollment
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
@@ -52,17 +80,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
     
     if ($action === 'enroll') {
-        $insert_query = "INSERT INTO enrollments (student_id, course_id, enrollment_status) VALUES (?, ?, 'enrolled')";
-        $insert_stmt = $conn->prepare($insert_query);
-        $insert_stmt->bind_param("ii", $user_id, $course_id);
+        // Get course info for block course limit check
+        $course_info_query = "SELECT max_enrollments FROM courses WHERE id = ?";
+        $course_info_stmt = $conn->prepare($course_info_query);
+        $course_info_stmt->bind_param("i", $course_id);
+        $course_info_stmt->execute();
+        $course_info = $course_info_stmt->get_result()->fetch_assoc();
+        $course_info_stmt->close();
         
-        if ($insert_stmt->execute()) {
-            log_activity($user_id, 'enroll', 'ลงทะเบียนวิชา', $course_id);
-            show_message('✅ ลงทะเบียนสำเร็จ!', 'success');
+        $max_enrollments = $course_info['max_enrollments'];
+        
+        // Check if already at enrollment limit
+        if ($semester_enroll_count >= $max_enrollments) {
+            show_message('❌ คุณลงทะเบียนวิชาครบตามจำนวนสูงสุดแล้ว (' . $max_enrollments . ' วิชา) ต้องยกเลิกวิชาอื่นก่อน', 'error');
         } else {
-            show_message('❌ ไม่สามารถลงทะเบียนได้', 'error');
+            $insert_query = "INSERT INTO enrollments (student_id, course_id, enrollment_status, academic_year) 
+                            VALUES (?, ?, 'enrolled', (SELECT config_value FROM admin_config WHERE config_key = 'current_academic_year'))";
+            $insert_stmt = $conn->prepare($insert_query);
+            $insert_stmt->bind_param("ii", $user_id, $course_id);
+            
+            if ($insert_stmt->execute()) {
+                log_activity($user_id, 'enroll', 'ลงทะเบียนวิชา', $course_id);
+                show_message('✅ ลงทะเบียนสำเร็จ!', 'success');
+            } else {
+                show_message('❌ ไม่สามารถลงทะเบียนได้', 'error');
+            }
+            $insert_stmt->close();
         }
-        $insert_stmt->close();
     } elseif ($action === 'unenroll') {
         $delete_query = "DELETE FROM enrollments WHERE student_id = ? AND course_id = ?";
         $delete_stmt = $conn->prepare($delete_query);
@@ -371,6 +415,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             font-size: 18px;
             color: #666;
         }
+
+        @media (max-width: 768px) {
+            .page-header {
+                flex-direction: column;
+                text-align: left;
+            }
+
+            .page-header div:last-child {
+                text-align: left;
+                font-size: 13px;
+                width: 100%;
+            }
+
+            .courses-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .search-bar {
+                flex-direction: column;
+            }
+
+            .search-bar input {
+                min-width: auto;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -384,6 +461,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     <div class="container">
         <div class="page-header">
             <h2>📖 เลือกวิชาที่ต้องการลงทะเบียน</h2>
+            <div style="color: #666; font-size: 14px; text-align: right; display: flex; gap: 20px; flex-wrap: wrap; justify-content: flex-end;">
+                <div>🎓 ชั้นปี: <strong><?php echo $grade_level; ?></strong></div>
+                <div>🏫 ห้อง: <strong><?php echo $user_class; ?></strong></div>
+                <div>📚 ภาค: <strong><?php echo $current_semester; ?></strong></div>
+                <div>ปีการศึกษา: <strong><?php echo $current_year; ?></strong></div>
+                <div>ลงทะเบียนแล้ว: <strong id="current-enrollment"><?php echo $semester_enroll_count; ?></strong> วิชา</div>
+            </div>
         </div>
         
         <div class="search-bar">
@@ -408,7 +492,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 while ($course = $courses->fetch_assoc()):
                     $available_seats = $course['max_seats'] - $course['enrolled_count'];
                     $is_enrolled = in_array($course['id'], $enrolled_courses);
-                    $can_enroll = $available_seats > 0 && !$is_enrolled && $course['status'] === 'open';
+                    $can_enroll = $available_seats > 0 && !$is_enrolled && $course['status'] === 'open' && $semester_enroll_count < $course['max_enrollments'];
+                    $enrollment_limit_text = $course['max_enrollments'] === 999 ? 'ไม่จำกัด' : 'สูงสุด ' . $course['max_enrollments'] . ' วิชา';
             ?>
                     <div class="course-card">
                         <div class="course-header">
@@ -428,27 +513,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                             <div class="course-info">
                                 <strong>⭐ หน่วยกิต:</strong> <?php echo $course['credits']; ?>
                             </div>
+                            <div class="course-info">
+                                <strong>🏫 ห้องเรียน:</strong> <?php echo $course['classroom']; ?>
+                            </div>
                             
-                            <div class="course-info allowed-classes-info">
-                                <strong>🏫 ห้องที่เปิดรับ:</strong>
-                                <div class="allowed-classes">
-                                    <?php 
-                                    if (empty($course['allowed_classes'])) {
-                                        echo '<span class="class-badge class-all">ทุกห้อง</span>';
-                                    } else {
-                                        $allowed_classes = explode(',', $course['allowed_classes']);
-                                        foreach ($allowed_classes as $class) {
-                                            $class = trim($class);
-                                            $is_user_class = ($class === $user_class);
-                                            $badge_class = $is_user_class ? 'class-badge class-user' : 'class-badge';
-                                            echo "<span class='{$badge_class}'>";
-                                            echo htmlspecialchars($class);
-                                            if ($is_user_class) echo ' ✓';
-                                            echo '</span>';
-                                        }
-                                    }
-                                    ?>
-                                </div>
+                            <div style="background: #f0f0f0; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 12px; border-left: 3px solid #667eea;">
+                                <div>🎓 ชั้นปี: <strong><?php echo $course['grade_level']; ?></strong></div>
+                                <div>📚 ภาค: <strong><?php echo $course['semester']; ?></strong></div>
                             </div>
                             
                             <div class="seats-info">
@@ -459,6 +530,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                                 <?php endif; ?>
                                 <br><small>(ลงทะเบียนแล้ว <?php echo $course['enrolled_count']; ?>/<?php echo $course['max_seats']; ?>)</small>
                             </div>
+
+                            <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin: 10px 0; border-left: 3px solid #ffc107; font-size: 13px;">
+                                <strong>📋 Block Course:</strong> <?php echo $enrollment_limit_text; ?>
+                                <?php if ($course['max_enrollments'] !== 999): ?>
+                                    <br><small>(ลงทะเบียนแล้ว: <?php echo $semester_enroll_count; ?>/<?php echo $course['max_enrollments']; ?>)</small>
+                                <?php endif; ?>
+                            </div>
                             
                             <div class="action-buttons">
                                 <form method="POST" style="flex: 1;">
@@ -466,8 +544,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                                     <?php if ($is_enrolled): ?>
                                         <button type="submit" name="action" value="unenroll" class="btn btn-unenroll">ยกเลิกการลงทะเบียน</button>
                                     <?php else: ?>
-                                        <button type="submit" name="action" value="enroll" class="btn btn-enroll" <?php echo $can_enroll ? '' : 'disabled'; ?>>
-                                            <?php echo $can_enroll ? 'ลงทะเบียน' : ($course['status'] === 'closed' ? 'ปิดลงทะเบียน' : 'เต็ม'); ?>
+                                        <button type="submit" name="action" value="enroll" class="btn btn-enroll" <?php echo $can_enroll ? '' : 'disabled'; ?> title="<?php echo $can_enroll ? 'ลงทะเบียน' : ($semester_enroll_count >= $course['max_enrollments'] ? 'ลงทะเบียนครบแล้ว' : 'เต็มแล้ว'); ?>">
+                                            <?php 
+                                            if ($semester_enroll_count >= $course['max_enrollments']) {
+                                                echo 'ลงทะเบียนครบแล้ว';
+                                            } elseif (!$can_enroll) {
+                                                echo ($course['status'] === 'closed' ? 'ปิดลงทะเบียน' : 'เต็ม');
+                                            } else {
+                                                echo 'ลงทะเบียน';
+                                            }
+                                            ?>
                                         </button>
                                     <?php endif; ?>
                                 </form>
@@ -480,6 +566,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             ?>
                 <div class="no-courses" style="grid-column: 1 / -1;">
                     <p>😕 ไม่พบวิชาที่ตรงกับการค้นหา</p>
+                    <small style="color: #999;">
+                        ตรวจสอบการตั้งค่า:<br>
+                        • ชั้นปี: <strong><?php echo $grade_level; ?></strong><br>
+                        • ห้องเรียน: <strong><?php echo $user_class; ?></strong><br>
+                        • ภาคการศึกษา: <strong><?php echo $current_semester; ?></strong><br>
+                        • ปีการศึกษา: <strong><?php echo $current_year; ?></strong><br>
+                        <br>
+                        💡 ให้ Admin ไปตั้งค่าหรือตรวจสอบข้อมูลรายวิชาในระบบ
+                    </small>
                 </div>
             <?php endif; ?>
         </div>

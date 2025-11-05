@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = '❌ กรุณากรอกชื่อผู้ใช้และรหัสผ่าน';
     } else {
-        $query = "SELECT id, username, password, full_name, role, status FROM users WHERE username = ?";
+        $query = "SELECT id, username, password, full_name, role, status, class_room, class_number FROM users WHERE username = ?";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("s", $username);
         $stmt->execute();
@@ -35,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role'];
+                $_SESSION['class_room'] = $user['class_room'];
+                $_SESSION['class_number'] = $user['class_number'];
                 
                 if ($user['role'] === 'admin') {
                     header('Location: admin/dashboard.php');

@@ -163,14 +163,40 @@ if ($_SESSION['role'] === 'admin') {
                 flex-direction: column;
                 gap: 15px;
             }
-            
-            .menu-buttons {
+
+            .navbar-user {
+                flex-direction: column;
+                gap: 10px;
                 width: 100%;
             }
-            
-            .menu-btn {
-                flex: 1;
+
+            .user-info {
+                font-size: 13px;
                 text-align: center;
+            }
+
+            .btn-logout {
+                width: 100%;
+                text-align: center;
+            }
+
+            .page-header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .menu-buttons {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .menu-btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -182,6 +208,9 @@ if ($_SESSION['role'] === 'admin') {
             <div class="navbar-user">
                 <div class="user-info">
                     👤 <?php echo $_SESSION['full_name']; ?>
+                    <?php if (isset($_SESSION['class_room']) && $_SESSION['class_room']): ?>
+                        <br><small style="opacity: 0.8;">🏫 <?php echo $_SESSION['class_room']; ?> | เลขที่ <?php echo $_SESSION['class_number']; ?></small>
+                    <?php endif; ?>
                 </div>
                 <a href="logout.php" class="btn-logout">🚪 ออกจากระบบ</a>
             </div>

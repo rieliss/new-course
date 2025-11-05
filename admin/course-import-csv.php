@@ -66,17 +66,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['csv_file'])) {
                     $schedule_day = trim($data[4] ?? '');
                     $schedule_time = trim($data[5] ?? '');
                     $max_seats = (int)($data[6] ?? 30);
-                    $allowed_classes = trim($data[7] ?? '');
-                    $description = trim($data[8] ?? '');
-                    $status = trim($data[9] ?? 'open');
+                    $grade_level = (int)($data[7] ?? 4);
+                    $semester = (int)($data[8] ?? 1);
+                    $classroom = trim($data[9] ?? '');
+                    $max_enrollments = (int)($data[10] ?? 999);
+                    $description = trim($data[11] ?? '');
+                    $status = trim($data[12] ?? 'open');
 
                     // Validate required fields
-                    if (empty($course_code) || empty($course_name) || empty($teacher_name)) {
+                    if (empty($course_code) || empty($course_name) || empty($teacher_name) || empty($classroom)) {
                         $import_results[] = [
                             'row' => $row_count,
                             'code' => $course_code,
                             'status' => 'error',
-                            'message' => '❌ ข้อมูลที่จำเป็นไม่ครบ (รหัสวิชา, ชื่อวิชา, ชื่ออาจารย์)'
+                            'message' => '❌ ข้อมูลที่จำเป็นไม่ครบ (รหัสวิชา, ชื่อวิชา, ชื่ออาจารย์, ห้องเรียน)'
                         ];
                         $error_count++;
                         continue;
@@ -118,13 +121,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['csv_file'])) {
 
                     // Insert course
                     $insert_query = "INSERT INTO courses (course_code, course_name, teacher_name, credits, 
-                                    schedule_day, schedule_time, max_seats, allowed_classes, description, status) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                                    schedule_day, schedule_time, max_seats, grade_level, semester, classroom, 
+                                    max_enrollments, description, status) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     $insert_stmt = $conn->prepare($insert_query);
-                    $insert_stmt->bind_param("sssiissss", 
+                    $insert_stmt->bind_param("sssissiiisiss", 
                         $course_code, $course_name, $teacher_name, $credits, 
-                        $schedule_day, $schedule_time, $max_seats, 
-                        $allowed_classes, $description, $status);
+                        $schedule_day, $schedule_time, $max_seats, $grade_level, $semester,
+                        $classroom, $max_enrollments, $description, $status);
 
                     if ($insert_stmt->execute()) {
                         $import_results[] = [
@@ -551,9 +555,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['csv_file'])) {
                         <li><strong>5. วันที่เรียน</strong> - schedule_day</li>
                         <li><strong>6. เวลาเรียน</strong> - schedule_time</li>
                         <li><strong>7. จำนวนที่นั่ง</strong> - max_seats (ค่าเริ่มต้น: 30)</li>
-                        <li><strong>8. ห้องที่อนุญาต</strong> - allowed_classes (ม.4/1,ม.4/2)</li>
-                        <li><strong>9. คำอธิบาย</strong> - description</li>
-                        <li><strong>10. สถานะ</strong> - status (open/closed)</li>
+                        <li><strong>8. ชั้นปี</strong> - grade_level (4, 5, 6)</li>
+                        <li><strong>9. ภาคการศึกษา</strong> - semester (1 หรือ 2)</li>
+                        <li><strong>10. ห้องเรียน</strong> - classroom (เช่น ม.4/1, ม.5/1)</li>
+                        <li><strong>11. จำนวนวิชาสูงสุด</strong> - max_enrollments (ค่าเริ่มต้น: 999)</li>
+                        <li><strong>12. คำอธิบาย</strong> - description</li>
+                        <li><strong>13. สถานะ</strong> - status (open/closed)</li>
                     </ul>
                 </div>
                 
@@ -562,8 +569,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['csv_file'])) {
                         💡 <strong>เคล็ดลับ:</strong>
                     </p>
                     <p style="font-size: 12px; color: #1565c0;">
-                        • ความจำเป็นเพียง 3 คอลัมน์แรกเท่านั้น (รหัส, ชื่อ, อาจารย์)<br>
-                        • คอลัมน์อื่น ๆ เป็นทางเลือก<br>
+                        • ความจำเป็นอย่างน้อย 4 คอลัมน์: รหัส, ชื่อ, อาจารย์, ห้องเรียน<br>
+                        • คอลัมน์อื่น ๆ จะใช้ค่าเริ่มต้น<br>
                         • ดาวน์โหลดตัวอย่างเพื่อดูรูปแบบที่ถูกต้อง
                     </p>
                 </div>

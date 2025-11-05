@@ -35,7 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $schedule_day = trim($_POST['schedule_day'] ?? '');
     $schedule_time = trim($_POST['schedule_time'] ?? '');
     $max_seats = (int)($_POST['max_seats'] ?? 30);
-    $allowed_classes = trim($_POST['allowed_classes'] ?? '');
+    $grade_level = (int)($_POST['grade_level'] ?? 4);
+    $semester = (int)($_POST['semester'] ?? 1);
+    $classroom = trim($_POST['classroom'] ?? '');
+    $max_enrollments = (int)($_POST['max_enrollments'] ?? 999);
     $description = trim($_POST['description'] ?? '');
     $status = $_POST['status'] ?? 'open';
 
@@ -46,29 +49,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($teacher_name)) $errors[] = 'กรุณากรอกชื่ออาจารย์';
     if ($credits <= 0) $errors[] = 'กรุณากรอกหน่วยกิตให้ถูกต้อง';
     if ($max_seats <= 0) $errors[] = 'กรุณากรอกจำนวนที่นั่งให้ถูกต้อง';
+    if ($grade_level < 1 || $grade_level > 6) $errors[] = 'ชั้นปีต้องเป็นตั้งแต่ 1-6';
+    if ($semester < 1 || $semester > 2) $errors[] = 'ภาคการศึกษาต้องเป็น 1 หรือ 2';
+    if (empty($classroom)) $errors[] = 'กรุณากรอกห้องเรียน';
+    if ($max_enrollments <= 0) $errors[] = 'จำนวนวิชาสูงสุดต้องมากกว่า 0';
     if (!in_array($status, ['open', 'closed'])) $errors[] = 'สถานะไม่ถูกต้อง';
-
-    if (empty($errors)) {
-        // Check if course_code already exists for other courses
-        $check_query = "SELECT id FROM courses WHERE course_code = ? AND id != ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("si", $course_code, $course_id);
-        $check_stmt->execute();
-        if ($check_stmt->get_result()->num_rows > 0) {
-            $errors[] = 'รหัสวิชานี้มีอยู่แล้ว';
-        }
-        $check_stmt->close();
-    }
 
     if (empty($errors)) {
         $update_query = "UPDATE courses SET course_code = ?, course_name = ?, teacher_name = ?, 
                         credits = ?, schedule_day = ?, schedule_time = ?, max_seats = ?, 
-                        allowed_classes = ?, description = ?, status = ? WHERE id = ?";
+                        grade_level = ?, semester = ?, classroom = ?, max_enrollments = ?, 
+                        description = ?, status = ? WHERE id = ?";
         $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param("sssissssssi", 
+        $update_stmt->bind_param("sssissiiisissi", 
             $course_code, $course_name, $teacher_name, $credits, 
-            $schedule_day, $schedule_time, $max_seats, 
-            $allowed_classes, $description, $status, $course_id);
+            $schedule_day, $schedule_time, $max_seats, $grade_level, $semester,
+            $classroom, $max_enrollments, $description, $status, $course_id);
         
         if ($update_stmt->execute()) {
             log_activity($_SESSION['user_id'], 'course_edit', 
@@ -341,10 +337,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="number" name="max_seats" value="<?php echo $course['max_seats']; ?>" min="1" required>
                     </div>
                     <div class="form-group">
-                        <label>🏫 ห้องที่อนุญาต</label>
-                        <input type="text" name="allowed_classes" value="<?php echo htmlspecialchars($course['allowed_classes']); ?>" placeholder="เช่น ม.4/1,ม.4/2,ม.5/1">
-                        <div class="help-text">ใช้ comma (,) เพื่อแยกห้อง เว้นไว้เป็นค่าว่างเพื่ออนุญาตให้ทุกห้อง</div>
+                        <label>🎓 ชั้นปี</label>
+                        <select name="grade_level" required>
+                            <option value="4" <?php echo $course['grade_level'] == 4 ? 'selected' : ''; ?>>ม.4</option>
+                            <option value="5" <?php echo $course['grade_level'] == 5 ? 'selected' : ''; ?>>ม.5</option>
+                            <option value="6" <?php echo $course['grade_level'] == 6 ? 'selected' : ''; ?>>ม.6</option>
+                        </select>
                     </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>📚 ภาคการศึกษา</label>
+                        <select name="semester" required>
+                            <option value="1" <?php echo $course['semester'] == 1 ? 'selected' : ''; ?>>ภาคที่ 1</option>
+                            <option value="2" <?php echo $course['semester'] == 2 ? 'selected' : ''; ?>>ภาคที่ 2</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>🏫 ห้องเรียน</label>
+                        <input type="text" name="classroom" value="<?php echo htmlspecialchars($course['classroom']); ?>" placeholder="เช่น ม.4/1" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>📋 จำนวนวิชาสูงสุด (Block Course)</label>
+                    <input type="number" name="max_enrollments" value="<?php echo $course['max_enrollments']; ?>" min="1">
+                    <div class="help-text">จำนวนวิชาที่นักเรียนสามารถลงทะเบียนได้สูงสุดในภาคการศึกษา (ตั้งค่า 999 สำหรับไม่จำกัด)</div>
                 </div>
                 
                 <div class="form-group">

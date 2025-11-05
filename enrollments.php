@@ -9,16 +9,40 @@ if ($_SESSION['role'] === 'admin') {
 
 $user_id = $_SESSION['user_id'];
 
-// Get enrolled courses
-$query = "SELECT c.id, c.course_code, c.course_name, c.teacher_name, c.credits, c.schedule_day, c.schedule_time,
+// Get user info
+$user_query = "SELECT full_name, class_room, class_number FROM users WHERE id = ?";
+$user_stmt = $conn->prepare($user_query);
+$user_stmt->bind_param("i", $user_id);
+$user_stmt->execute();
+$user_data = $user_stmt->get_result()->fetch_assoc();
+$user_stmt->close();
+
+// Get current semester from admin config
+$config_query = "SELECT config_value FROM admin_config WHERE config_key = 'current_semester'";
+$config_stmt = $conn->prepare($config_query);
+$config_stmt->execute();
+$config_result = $config_stmt->get_result()->fetch_assoc();
+$current_semester = $config_result ? (int)$config_result['config_value'] : 1;
+$config_stmt->close();
+
+// Get current academic year from admin config
+$year_query = "SELECT config_value FROM admin_config WHERE config_key = 'current_academic_year'";
+$year_stmt = $conn->prepare($year_query);
+$year_stmt->execute();
+$year_result = $year_stmt->get_result()->fetch_assoc();
+$current_year = $year_result ? (int)$year_result['config_value'] : 2024;
+$year_stmt->close();
+
+// Get enrolled courses for current semester
+$query = "SELECT c.id, c.course_code, c.course_name, c.teacher_name, c.credits, c.schedule_day, c.schedule_time, c.semester, c.grade_level,
           e.enrolled_at
           FROM enrollments e
           JOIN courses c ON e.course_id = c.id
-          WHERE e.student_id = ? AND e.enrollment_status = 'enrolled'
-          ORDER BY e.enrolled_at DESC";
+          WHERE e.student_id = ? AND e.enrollment_status = 'enrolled' AND e.academic_year = ? AND c.semester = ?
+          ORDER BY c.semester, e.enrolled_at DESC";
 
 $stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
+$stmt->bind_param("iii", $user_id, $current_year, $current_semester);
 $stmt->execute();
 $enrollments = $stmt->get_result();
 $total_credits = 0;
@@ -177,12 +201,33 @@ $total_credits = 0;
         }
         
         @media (max-width: 768px) {
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .page-header h2 {
+                font-size: 24px;
+            }
+
             table {
                 font-size: 13px;
             }
             
             th, td {
                 padding: 10px;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-card {
+                padding: 15px;
+            }
+
+            .stat-value {
+                font-size: 24px;
             }
         }
     </style>
@@ -197,7 +242,14 @@ $total_credits = 0;
 
     <div class="container">
         <div class="page-header">
-            <h2>✅ วิชาที่ลงทะเบียนแล้ว</h2>
+            <div>
+                <h2>✅ วิชาที่ลงทะเบียนแล้ว</h2>
+                <div style="color: #666; font-size: 14px; margin-top: 10px;">
+                    👤 <?php echo htmlspecialchars($user_data['full_name']); ?> 
+                    | 🏫 <?php echo htmlspecialchars($user_data['class_room']); ?> 
+                    | เลขที่ <?php echo $user_data['class_number']; ?>
+                </div>
+            </div>
         </div>
         
         <?php if ($enrollments->num_rows > 0): ?>
@@ -220,6 +272,7 @@ $total_credits = 0;
                             <th>ชื่อวิชา</th>
                             <th>ครูผู้สอน</th>
                             <th>เวลา</th>
+                            <th>ภาค</th>
                             <th>หน่วยกิต</th>
                             <th>วันที่ลงทะเบียน</th>
                         </tr>
@@ -236,6 +289,7 @@ $total_credits = 0;
                                 <td><?php echo $row['course_name']; ?></td>
                                 <td><?php echo $row['teacher_name']; ?></td>
                                 <td><?php echo $row['schedule_time']; ?></td>
+                                <td><?php echo $row['semester']; ?></td>
                                 <td><?php echo $row['credits']; ?></td>
                                 <td><?php echo date('d/m/Y', strtotime($row['enrolled_at'])); ?></td>
                             </tr>

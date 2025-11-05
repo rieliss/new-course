@@ -228,6 +228,7 @@ $top_courses = $conn->query($top_courses_query);
                 <a href="courses-management.php" class="menu-btn">📖 จัดการวิชา</a>
                 <a href="users-management.php" class="menu-btn">👥 จัดการผู้ใช้</a>
                 <a href="activity-logs.php" class="menu-btn">📝 ดูกิจกรรม</a>
+                <a href="config-settings.php" class="menu-btn">⚙️ การตั้งค่า</a>
                 <!-- <a href="../index.php" class="menu-btn">← กลับหน้าหลัก</a> -->
             </div>
         </div>
